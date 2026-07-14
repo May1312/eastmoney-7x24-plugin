@@ -5,4 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "eastmoney-7x24-plugin"
+rootProject.name = "finance-7x24-plugin"

@@ -1,4 +1,4 @@
-package com.ylplugin.eastmoney.kuaixun;
+package com.plugin.finance;
 
 public class KuaixunItem {
     private final String id;

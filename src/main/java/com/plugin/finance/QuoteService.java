@@ -1,4 +1,4 @@
-package com.ylplugin.eastmoney.kuaixun;
+package com.plugin.finance;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;

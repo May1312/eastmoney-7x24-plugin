@@ -1,4 +1,4 @@
-package com.ylplugin.eastmoney.kuaixun;
+package com.plugin.finance;
 
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;

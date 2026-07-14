@@ -1,4 +1,4 @@
-package com.ylplugin.eastmoney.kuaixun;
+package com.plugin.finance;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.IconLoader;
@@ -19,7 +19,7 @@ public class KuaixunPanel extends JPanel {
     private final DefaultListModel<KuaixunItem> listModel = new DefaultListModel<>();
     private final JBList<KuaixunItem> newsList = new JBList<>(listModel);
     private final KuaixunService service = new KuaixunService();
-    private final JLabel statusLabel = new JLabel("正在加载东方财富7x24快讯...");
+    private final JLabel statusLabel = new JLabel("正在加载 7x24 快讯...");
     private final Timer refreshTimer;
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
     private int currentPage = 1;
@@ -41,7 +41,7 @@ public class KuaixunPanel extends JPanel {
         refreshBtn.setPreferredSize(JBUI.size(30, 28));
         refreshBtn.addActionListener(e -> refreshData());
 
-        JLabel titleLabel = new JLabel("东方财富 7x24");
+        JLabel titleLabel = new JLabel("财经 7x24");
         titleLabel.setFont(JBFont.label().asBold());
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));

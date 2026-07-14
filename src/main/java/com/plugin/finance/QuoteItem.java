@@ -1,4 +1,4 @@
-package com.ylplugin.eastmoney.kuaixun;
+package com.plugin.finance;
 
 public class QuoteItem {
     private final String code;
