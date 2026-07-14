@@ -1,4 +1,4 @@
-package com.ylplugin.eastmoney.kuaixun;
+package com.plugin.finance;
 
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.project.Project;
@@ -324,25 +324,45 @@ public class WatchlistPanel extends JPanel {
     private static class QuoteTableRenderer extends DefaultTableCellRenderer {
         private static final Color RISE_COLOR = new JBColor(new Color(0xC62828), new Color(0xFF6B6B));
         private static final Color FALL_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x69D98A));
+        private static final double EPS = 1e-9;
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                       boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                                                        boolean hasFocus, int row, int column) {
+            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             setBorder(JBUI.Borders.empty(0, 8));
             setHorizontalAlignment(CENTER);
 
-            if (!isSelected && column >= 3) {
-                String text = String.valueOf(value);
-                if (text.startsWith("+")) {
-                    component.setForeground(RISE_COLOR);
-                } else if (text.startsWith("-")) {
-                    component.setForeground(FALL_COLOR);
-                } else {
-                    component.setForeground(table.getForeground());
-                }
+            if (isSelected) {
+                return this;
             }
-            return component;
+
+            int modelColumn = table.convertColumnIndexToModel(column);
+            if (modelColumn < 2 || modelColumn > 4) {
+                setForeground(table.getForeground());
+                return this;
+            }
+
+            int modelRow = table.convertRowIndexToModel(row);
+            double percent = parsePercent(table.getModel().getValueAt(modelRow, 3));
+            Color color;
+            if (percent > EPS) {
+                color = RISE_COLOR;
+            } else if (percent < -EPS) {
+                color = FALL_COLOR;
+            } else {
+                color = table.getForeground();
+            }
+            setForeground(color);
+            return this;
+        }
+
+        private double parsePercent(Object value) {
+            try {
+                return Double.parseDouble(String.valueOf(value).replace("%", "").trim());
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
         }
     }
 }
