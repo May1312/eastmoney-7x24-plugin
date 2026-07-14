@@ -47,7 +47,6 @@ public class WatchlistPanel extends JPanel {
         properties = PropertiesComponent.getInstance(project);
 
         setLayout(new BorderLayout());
-        setBorder(JBUI.Borders.empty(4));
 
         codesField.setText(properties.getValue(CODES_KEY, "510300,159915,600519"));
         JButton addButton = new JButton(IconLoader.getIcon("/icons/add.svg", WatchlistPanel.class));

@@ -1,6 +1,8 @@
 package com.ylplugin.eastmoney.kuaixun;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.IconLoader;
+import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBList;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.util.ui.JBFont;
@@ -34,22 +36,28 @@ public class KuaixunPanel extends JPanel {
         newsList.setVisibleRowCount(20);
         newsList.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        JButton refreshBtn = new JButton("刷新");
+        JButton refreshBtn = new JButton(IconLoader.getIcon("/icons/refresh.svg", KuaixunPanel.class));
+        refreshBtn.setToolTipText("刷新");
+        refreshBtn.setPreferredSize(JBUI.size(30, 28));
         refreshBtn.addActionListener(e -> refreshData());
 
         JLabel titleLabel = new JLabel("东方财富 7x24");
         titleLabel.setFont(JBFont.label().asBold());
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        buttonPanel.add(refreshBtn);
+
+        JPanel actionPanel = new JPanel(new BorderLayout(8, 0));
+        actionPanel.add(titleLabel, BorderLayout.CENTER);
+        actionPanel.add(buttonPanel, BorderLayout.EAST);
+
         statusLabel.setFont(JBFont.small());
         statusLabel.setForeground(UIManager.getColor("Label.infoForeground"));
 
-        JPanel titlePanel = new JPanel(new BorderLayout());
-        titlePanel.add(titleLabel, BorderLayout.NORTH);
-        titlePanel.add(statusLabel, BorderLayout.SOUTH);
-
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.setBorder(JBUI.Borders.empty(2, 4, 8, 4));
-        topPanel.add(titlePanel, BorderLayout.CENTER);
-        topPanel.add(refreshBtn, BorderLayout.EAST);
+        JPanel topPanel = new JPanel(new BorderLayout(0, 6));
+        topPanel.setBorder(JBUI.Borders.empty(6, 8, 10, 8));
+        topPanel.add(actionPanel, BorderLayout.NORTH);
+        topPanel.add(statusLabel, BorderLayout.SOUTH);
 
         newsPanel.add(topPanel, BorderLayout.NORTH);
         newsPanel.add(new JBScrollPane(newsList), BorderLayout.CENTER);
@@ -121,11 +129,13 @@ public class KuaixunPanel extends JPanel {
     }
 
     private static class KuaixunCellRenderer extends JPanel implements ListCellRenderer<KuaixunItem> {
+        private static final Color TITLE_COLOR = new JBColor(new Color(0x1677FF), new Color(0x6DA8FF));
         private final JLabel timeLabel = new JLabel();
-        private final JTextArea contentArea = new JTextArea();
+        private final JTextArea titleArea = new JTextArea();
+        private final JTextArea digestArea = new JTextArea();
 
         private KuaixunCellRenderer() {
-            super(new BorderLayout(0, 4));
+            super(new BorderLayout(0, 6));
             setOpaque(true);
             setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 0, 1, 0, UIManager.getColor("Separator.foreground")),
@@ -133,33 +143,71 @@ public class KuaixunPanel extends JPanel {
             ));
 
             timeLabel.setFont(JBFont.small());
-            contentArea.setFont(JBFont.label());
-            contentArea.setOpaque(false);
-            contentArea.setEditable(false);
-            contentArea.setFocusable(false);
-            contentArea.setLineWrap(true);
-            contentArea.setWrapStyleWord(true);
+
+            titleArea.setFont(JBFont.label().asBold().deriveFont(JBFont.label().getSize() + 2.0f));
+            titleArea.setOpaque(false);
+            titleArea.setEditable(false);
+            titleArea.setFocusable(false);
+            titleArea.setLineWrap(true);
+            titleArea.setWrapStyleWord(true);
+
+            digestArea.setFont(JBFont.label());
+            digestArea.setOpaque(false);
+            digestArea.setEditable(false);
+            digestArea.setFocusable(false);
+            digestArea.setLineWrap(true);
+            digestArea.setWrapStyleWord(true);
+
+            JPanel contentPanel = new JPanel(new BorderLayout(0, 4));
+            contentPanel.setOpaque(false);
+            contentPanel.add(titleArea, BorderLayout.NORTH);
+            contentPanel.add(digestArea, BorderLayout.CENTER);
 
             add(timeLabel, BorderLayout.NORTH);
-            add(contentArea, BorderLayout.CENTER);
+            add(contentPanel, BorderLayout.CENTER);
         }
 
         @Override
         public Component getListCellRendererComponent(JList<? extends KuaixunItem> list, KuaixunItem item, int index,
                                                        boolean isSelected, boolean cellHasFocus) {
             timeLabel.setText(item.getDisplayTimeText());
-            contentArea.setText(item.getContentText());
 
-            Color background = isSelected ? list.getSelectionBackground() : list.getBackground();
-            Color foreground = isSelected ? list.getSelectionForeground() : list.getForeground();
-            setBackground(background);
-            timeLabel.setForeground(isSelected ? foreground : UIManager.getColor("Label.infoForeground"));
-            contentArea.setForeground(foreground);
-            contentArea.setBackground(background);
+            String title = item.getTitle();
+            String digest = item.getDigest();
+            boolean hasDigest = digest != null && !digest.isEmpty()
+                    && !digest.equals(title)
+                    && !digest.replaceAll("[【】。，！？,.;:！？、…·\\s]", "").equals(title.replaceAll("[【】。，！？,.;:！？、…·\\s]", ""));
+
+            titleArea.setText(title != null ? title : "");
+            if (hasDigest) {
+                digestArea.setText(digest);
+                digestArea.setVisible(true);
+            } else {
+                digestArea.setVisible(false);
+            }
+
+            Color bg = list.getBackground();
+            Color fg = list.getForeground();
+            setBackground(bg);
+            timeLabel.setForeground(UIManager.getColor("Label.infoForeground"));
+            titleArea.setForeground(TITLE_COLOR);
+            digestArea.setForeground(fg);
+            titleArea.setBackground(bg);
+            digestArea.setBackground(bg);
 
             int width = list.getWidth() - JBUI.scale(32);
             if (width > 0) {
-                contentArea.setSize(width, Short.MAX_VALUE);
+                titleArea.setSize(width, Short.MAX_VALUE);
+                Dimension ts = titleArea.getPreferredSize();
+                ts.width = width;
+                titleArea.setPreferredSize(ts);
+
+                if (hasDigest) {
+                    digestArea.setSize(width, Short.MAX_VALUE);
+                    Dimension ds = digestArea.getPreferredSize();
+                    ds.width = width;
+                    digestArea.setPreferredSize(ds);
+                }
             }
 
             return this;
