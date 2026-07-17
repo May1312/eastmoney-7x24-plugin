@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class QuoteService {
-    private static final String EASTMONEY_API_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f12,f14,f2,f3,f4&secids=%s";
+    private static final String EASTMONEY_API_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f12,f14,f2,f3,f4,f15,f16,f17,f18&secids=%s";
     private static final String TENCENT_API_URL = "https://qt.gtimg.cn/q=%s";
     private static final String SINA_API_URL = "https://hq.sinajs.cn/list=%s";
     private String lastSource = "";
@@ -87,7 +87,11 @@ public class QuoteService {
                     getString(quote, "f14"),
                     getDouble(quote, "f2"),
                     getDouble(quote, "f3"),
-                    getDouble(quote, "f4")
+                    getDouble(quote, "f4"),
+                    getDouble(quote, "f17"),
+                    getDouble(quote, "f18"),
+                    getDouble(quote, "f15"),
+                    getDouble(quote, "f16")
             ));
         }
         return items;
@@ -111,12 +115,21 @@ public class QuoteService {
             if (fields.length < 33 || fields[1].isEmpty()) {
                 continue;
             }
+            double currentPrice = parseDouble(fields[3]);
+            double closePrice = parseDouble(fields[4]);
+            double openPrice = parseDouble(fields.length > 5 ? fields[5] : "");
+            double highPrice = parseDouble(fields.length > 33 ? fields[33] : "");
+            double lowPrice = parseDouble(fields.length > 34 ? fields[34] : "");
             items.add(new QuoteItem(
                     fields[2],
                     fields[1],
-                    parseDouble(fields[3]),
+                    currentPrice,
                     parseDouble(fields[32]),
-                    parseDouble(fields[31])
+                    parseDouble(fields[31]),
+                    openPrice,
+                    closePrice,
+                    highPrice,
+                    lowPrice
             ));
         }
         return items;
@@ -144,9 +157,12 @@ public class QuoteService {
             double open = parseDouble(fields[1]);
             double previousClose = parseDouble(fields[2]);
             double price = parseDouble(fields[3]);
+            double highPrice = parseDouble(fields.length > 4 ? fields[4] : "");
+            double lowPrice = parseDouble(fields.length > 5 ? fields[5] : "");
             double changeAmount = price - previousClose;
             double changePercent = previousClose == 0 ? 0 : changeAmount / previousClose * 100;
-            items.add(new QuoteItem(code, fields[0], price == 0 ? open : price, changePercent, changeAmount));
+            items.add(new QuoteItem(code, fields[0], price == 0 ? open : price, changePercent, changeAmount,
+                    open, previousClose, highPrice, lowPrice));
         }
         return items;
     }

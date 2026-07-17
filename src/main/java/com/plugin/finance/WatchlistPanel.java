@@ -16,8 +16,8 @@ import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.time.LocalTime;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.DayOfWeek;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -27,34 +27,56 @@ import java.util.List;
 import java.util.Set;
 
 public class WatchlistPanel extends JPanel {
+
     private static final String CODES_KEY = "eastmoney.7x24.watchlist.codes";
+    private static final String[] COLUMN_NAMES = {"代码", "名称", "最新价", "涨跌幅", "涨跌额"};
+    private static final List<String> INDEX_CODES = List.of("sh000001", "sz399001", "sz399006");
+    private static final String[] INDEX_NAMES = {"上证指数", "深证成指", "创业板指"};
+
     private final PropertiesComponent properties;
     private final QuoteService quoteService = new QuoteService();
-    private final JTextField codesField = new JTextField();
-    private final JLabel statusLabel = new JLabel("输入股票或 ETF 代码，多个代码用逗号分隔");
-    private final DefaultTableModel tableModel = new DefaultTableModel(new Object[]{"代码", "名称", "最新价", "涨跌幅"}, 0) {
-        @Override
-        public boolean isCellEditable(int row, int column) {
-            return false;
-        }
+    private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+
+    private final DefaultTableModel tableModel = new DefaultTableModel(COLUMN_NAMES, 0) {
+        @Override public boolean isCellEditable(int row, int column) { return false; }
     };
     private final JTable quoteTable = new JTable(tableModel);
     private final TableRowSorter<DefaultTableModel> tableSorter = new TableRowSorter<>(tableModel);
-    private final Timer refreshTimer;
-    private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private final JLabel statusLabel = new JLabel("就绪");
+
+    private final JComboBox<String> indexCombo = new JComboBox<>(INDEX_NAMES);
+    private final JLabel indexValueLabel = new JLabel("", SwingConstants.CENTER);
+    private final JLabel indexChangeLabel = new JLabel("", SwingConstants.CENTER);
+
+    private final javax.swing.Timer refreshTimer;
     private int sortedColumn = -1;
     private int sortState = 0;
+    private List<QuoteItem> lastIndexData = new ArrayList<>();
 
     public WatchlistPanel(Project project) {
         properties = PropertiesComponent.getInstance(project);
 
         setLayout(new BorderLayout());
 
-        codesField.setText(properties.getValue(CODES_KEY, "510300,159915,600519"));
+        initTopPanel();
+        initTable();
+        initBottomPanel();
+
+        indexCombo.addActionListener(e -> updateIndexDisplay());
+
+        refreshTimer = new Timer(30000, e -> refreshQuotes(false));
+        refreshTimer.start();
+
+        javax.swing.Timer initialRefresh = new javax.swing.Timer(2000, e -> refreshQuotes(true));
+        initialRefresh.setRepeats(false);
+        initialRefresh.start();
+    }
+
+    private void initTopPanel() {
         JButton addButton = new JButton(IconLoader.getIcon("/icons/add.svg", WatchlistPanel.class));
-        addButton.setToolTipText("添加股票或 ETF 代码");
+        addButton.setToolTipText("添加自选股");
         addButton.setPreferredSize(JBUI.size(30, 28));
-        addButton.addActionListener(e -> showAddCodeDialog());
+        addButton.addActionListener(e -> showAddDialog());
 
         JButton refreshButton = new JButton(IconLoader.getIcon("/icons/refresh.svg", WatchlistPanel.class));
         refreshButton.setToolTipText("刷新行情");
@@ -64,75 +86,169 @@ public class WatchlistPanel extends JPanel {
         JLabel titleLabel = new JLabel("自选行情");
         titleLabel.setFont(JBFont.label().asBold());
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        buttonPanel.add(addButton);
-        buttonPanel.add(refreshButton);
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        rightPanel.add(addButton);
+        rightPanel.add(refreshButton);
 
-        JPanel actionPanel = new JPanel(new BorderLayout(8, 0));
-        actionPanel.add(titleLabel, BorderLayout.CENTER);
-        actionPanel.add(buttonPanel, BorderLayout.EAST);
+        JPanel actionRow = new JPanel(new BorderLayout(8, 0));
+        actionRow.add(titleLabel, BorderLayout.WEST);
+        actionRow.add(rightPanel, BorderLayout.EAST);
 
         statusLabel.setFont(JBFont.small());
         statusLabel.setForeground(UIManager.getColor("Label.infoForeground"));
 
         JPanel topPanel = new JPanel(new BorderLayout(0, 6));
         topPanel.setBorder(JBUI.Borders.empty(6, 8, 10, 8));
-        topPanel.add(actionPanel, BorderLayout.NORTH);
+        topPanel.add(actionRow, BorderLayout.NORTH);
         topPanel.add(statusLabel, BorderLayout.SOUTH);
 
+        add(topPanel, BorderLayout.NORTH);
+    }
+
+    private void initTable() {
         quoteTable.setFillsViewportHeight(true);
-        quoteTable.setRowHeight(JBUI.scale(32));
+        quoteTable.setRowHeight(JBUI.scale(30));
         quoteTable.setShowVerticalLines(false);
         quoteTable.setIntercellSpacing(JBUI.emptySize());
-        quoteTable.setDefaultRenderer(Object.class, new QuoteTableRenderer());
+        quoteTable.setDefaultRenderer(Object.class, new WatchlistCellRenderer());
         quoteTable.setRowSorter(tableSorter);
+        quoteTable.getSelectionModel().setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         setupTableWidths();
         setupTableSorting();
         centerTableHeader();
         installPopupMenu();
 
-        add(topPanel, BorderLayout.NORTH);
         add(new JBScrollPane(quoteTable), BorderLayout.CENTER);
-
-        refreshTimer = new Timer(30000, e -> refreshQuotes());
-        refreshTimer.start();
-
-        Timer initialRefreshTimer = new Timer(2000, e -> refreshQuotes(true));
-        initialRefreshTimer.setRepeats(false);
-        initialRefreshTimer.start();
     }
 
-    @Override
-    public void removeNotify() {
-        refreshTimer.stop();
-        super.removeNotify();
+    private void initBottomPanel() {
+        JPanel bottomPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
+        bottomPanel.setBorder(JBUI.Borders.empty(6, 12, 6, 12));
+
+        indexCombo.setPreferredSize(JBUI.size(100, 26));
+        indexValueLabel.setFont(indexValueLabel.getFont().deriveFont(Font.BOLD, 12f));
+        indexChangeLabel.setFont(indexChangeLabel.getFont().deriveFont(Font.BOLD, 12f));
+
+        JPanel indexPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        indexPanel.add(indexCombo);
+        indexPanel.add(indexValueLabel);
+        indexPanel.add(indexChangeLabel);
+
+        bottomPanel.add(indexPanel, BorderLayout.WEST);
+
+        add(bottomPanel, BorderLayout.SOUTH);
     }
 
-    private void showAddCodeDialog() {
-        String input = JOptionPane.showInputDialog(
-                this,
-                "输入股票或 ETF 代码，多个代码可用逗号或空格分隔；指数可输入 sh000001",
-                "添加自选",
-                JOptionPane.PLAIN_MESSAGE
-        );
-        if (input == null || input.trim().isEmpty()) {
+    private void updateIndexDisplay() {
+        int idx = indexCombo.getSelectedIndex();
+        if (idx >= 0 && idx < lastIndexData.size()) {
+            QuoteItem item = lastIndexData.get(idx);
+            Color up = new JBColor(new Color(0xC62828), new Color(0xFF6B6B));
+            Color down = new JBColor(new Color(0x2E7D32), new Color(0x69D98A));
+            Color flat = UIManager.getColor("Label.infoForeground");
+
+            indexValueLabel.setText(String.format("%.2f", item.getPrice()));
+            indexChangeLabel.setText(String.format("%+.2f%%", item.getChangePercent()));
+
+            if (item.getChangePercent() > 0) {
+                indexValueLabel.setForeground(up);
+                indexChangeLabel.setForeground(up);
+            } else if (item.getChangePercent() < 0) {
+                indexValueLabel.setForeground(down);
+                indexChangeLabel.setForeground(down);
+            } else {
+                indexValueLabel.setForeground(flat);
+                indexChangeLabel.setForeground(flat);
+            }
+        }
+    }
+
+    private void showAddDialog() {
+        Window window = SwingUtilities.getWindowAncestor(this);
+        if (window == null) {
+            String input = JOptionPane.showInputDialog(this,
+                    "输入股票或 ETF 代码，多个代码可用逗号或空格分隔；指数可输入 sh000001",
+                    "添加自选", JOptionPane.PLAIN_MESSAGE);
+            if (input != null) addCodesFromText(input);
             return;
         }
+        StockSearchDialog dialog = new StockSearchDialog(window);
+        dialog.setVisible(true);
 
-        Set<String> codes = new LinkedHashSet<>(parseCodes());
-        for (String code : parseCodes(input)) {
-            codes.add(code);
+        if (dialog.isConfirmed()) {
+            List<String> codes = dialog.getSelectedCodes();
+            if (codes != null && !codes.isEmpty()) {
+                Set<String> existing = new LinkedHashSet<>(parseCodes());
+                for (String code : codes) {
+                    String normalized = normalizeCode(code);
+                    if (normalized != null) {
+                        existing.add(normalized);
+                    }
+                }
+                saveCodes(new ArrayList<>(existing));
+                statusLabel.setText("已添加 " + codes.size() + " 只自选股，正在刷新...");
+                refreshQuotes(true);
+            }
         }
-        if (codes.isEmpty()) {
-            statusLabel.setText("请输入股票或 ETF 代码，例如 600519、510300、sh000001");
-            return;
+    }
+
+    private void addCodesFromText(String input) {
+        Set<String> existing = new LinkedHashSet<>(parseCodes());
+        List<String> parsed = new ArrayList<>();
+        for (String s : input.split("[,，\\s]+")) {
+            String normalized = normalizeCode(s.trim());
+            if (normalized != null && existing.add(normalized)) {
+                parsed.add(normalized);
+            }
+        }
+        if (!parsed.isEmpty()) {
+            saveCodes(new ArrayList<>(existing));
+            statusLabel.setText("已添加 " + parsed.size() + " 只自选股，正在刷新...");
+            refreshQuotes(true);
+        }
+    }
+
+    private void deleteSelected() {
+        int[] rows = quoteTable.getSelectedRows();
+        if (rows.length == 0) return;
+
+        List<String> codesToRemove = new ArrayList<>();
+        for (int row : rows) {
+            int modelRow = quoteTable.convertRowIndexToModel(row);
+            String code = String.valueOf(tableModel.getValueAt(modelRow, 0));
+            codesToRemove.add(code);
         }
 
-        String joined = String.join(",", codes);
-        codesField.setText(joined);
-        properties.setValue(CODES_KEY, joined);
-        statusLabel.setText("已添加自选，正在刷新...");
-        refreshQuotes();
+        List<String> codes = parseCodes();
+        codes.removeIf(c -> codesToRemove.stream().anyMatch(c::endsWith));
+        saveCodes(codes);
+        statusLabel.setText("已删除 " + codesToRemove.size() + " 只");
+        refreshQuotes(true);
+    }
+
+    private void installPopupMenu() {
+        JPopupMenu popup = new JPopupMenu();
+
+        JMenuItem deleteItem = new JMenuItem("删除选中");
+        deleteItem.addActionListener(e -> deleteSelected());
+        popup.add(deleteItem);
+
+        quoteTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) { showPopup(e); }
+            @Override
+            public void mouseReleased(MouseEvent e) { showPopup(e); }
+            private void showPopup(MouseEvent e) {
+                if (!e.isPopupTrigger()) return;
+                int row = quoteTable.rowAtPoint(e.getPoint());
+                if (row >= 0) {
+                    if (!quoteTable.isRowSelected(row)) {
+                        quoteTable.setRowSelectionInterval(row, row);
+                    }
+                    popup.show(quoteTable, e.getX(), e.getY());
+                }
+            }
+        });
     }
 
     private void refreshQuotes() {
@@ -143,7 +259,8 @@ public class WatchlistPanel extends JPanel {
         List<String> codes = parseCodes();
         if (codes.isEmpty()) {
             tableModel.setRowCount(0);
-            statusLabel.setText("请输入股票或 ETF 代码，例如 600519、510300、sh000001");
+            statusLabel.setText("点击「添加」搜索股票");
+            refreshIndexData(force);
             return;
         }
         if (!isMarketOpen() && !force) {
@@ -155,103 +272,85 @@ public class WatchlistPanel extends JPanel {
         } else {
             statusLabel.setText("刷新中...");
         }
-        int retriesLeft = 3;
+
         new Thread(() -> {
             Exception lastException = null;
-            for (int attempt = 0; attempt <= retriesLeft; attempt++) {
+            for (int attempt = 0; attempt <= 3; attempt++) {
                 try {
                     List<QuoteItem> items = quoteService.fetchQuotes(codes);
-                    SwingUtilities.invokeLater(() -> updateTable(items));
+                    SwingUtilities.invokeLater(() -> {
+                        updateTable(items);
+                        refreshIndexData(force);
+                    });
                     return;
                 } catch (Exception e) {
                     lastException = e;
-                    if (attempt < retriesLeft) {
+                    if (attempt < 3) {
                         SwingUtilities.invokeLater(() -> statusLabel.setText("行情加载中，正在重试..."));
                     }
-                    try {
-                        Thread.sleep(1500);
-                    } catch (InterruptedException interruptedException) {
+                    try { Thread.sleep(1500); } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         return;
                     }
                 }
             }
             Exception failure = lastException;
-            SwingUtilities.invokeLater(() -> handleQuoteFailure(failure));
+            SwingUtilities.invokeLater(() -> {
+                if (tableModel.getRowCount() > 0) {
+                    statusLabel.setText("网络波动，显示上次行情");
+                } else {
+                    statusLabel.setText("行情加载失败，请稍后重试");
+                }
+                refreshIndexData(force);
+            });
+        }).start();
+    }
+
+    private void refreshIndexData(boolean force) {
+        new Thread(() -> {
+            try {
+                lastIndexData = quoteService.fetchQuotes(INDEX_CODES);
+                SwingUtilities.invokeLater(this::updateIndexDisplay);
+            } catch (Exception ignored) {}
         }).start();
     }
 
     private boolean isMarketOpen() {
         DayOfWeek dow = LocalDate.now().getDayOfWeek();
-        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
-            return false;
-        }
+        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) return false;
         LocalTime now = LocalTime.now();
         boolean morning = !now.isBefore(LocalTime.of(9, 30)) && now.isBefore(LocalTime.of(11, 30));
         boolean afternoon = !now.isBefore(LocalTime.of(13, 0)) && now.isBefore(LocalTime.of(15, 0));
         return morning || afternoon;
     }
 
-    private void handleQuoteFailure(Exception e) {
-        if (tableModel.getRowCount() > 0) {
-            statusLabel.setText("网络波动，显示上次行情");
-        } else {
-            statusLabel.setText("行情加载失败，请稍后重试");
+    private void updateTable(List<QuoteItem> items) {
+        tableModel.setRowCount(0);
+        for (QuoteItem item : items) {
+            tableModel.addRow(new Object[]{
+                    item.getCode(),
+                    item.getName(),
+                    formatPrice(item.getPrice()),
+                    formatPercent(item.getChangePercent()),
+                    formatPrice(item.getChangeAmount())
+            });
         }
+        statusLabel.setText("最后更新 " + LocalTime.now().format(timeFormatter)
+                + "    数据源：" + quoteService.getLastSource()
+                + "    每 30 秒自动刷新");
     }
 
-    private List<String> parseCodes() {
-        return parseCodes(codesField.getText());
-    }
-
-    private List<String> parseCodes(String text) {
-        String[] parts = text.split("[,，\\s]+");
-        Set<String> codes = new LinkedHashSet<>();
-        for (String part : parts) {
-            String code = part.trim().toLowerCase();
-            if (code.matches("(sh|sz)?\\d{6}")) {
-                codes.add(code);
-            }
-        }
-        return new ArrayList<>(codes);
-    }
-
-    private void installPopupMenu() {
-        JPopupMenu popupMenu = new JPopupMenu();
-        JMenuItem deleteItem = new JMenuItem("删除");
-        deleteItem.addActionListener(e -> deleteSelectedCode());
-        popupMenu.add(deleteItem);
-
-        quoteTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                showPopup(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                showPopup(e);
-            }
-
-            private void showPopup(MouseEvent e) {
-                if (!e.isPopupTrigger()) {
-                    return;
-                }
-                int row = quoteTable.rowAtPoint(e.getPoint());
-                if (row >= 0) {
-                    quoteTable.setRowSelectionInterval(row, row);
-                    popupMenu.show(quoteTable, e.getX(), e.getY());
-                }
-            }
-        });
+    @Override
+    public void removeNotify() {
+        refreshTimer.stop();
+        super.removeNotify();
     }
 
     private void setupTableWidths() {
-        int[] minWidths = {JBUI.scale(15), JBUI.scale(15), JBUI.scale(15), JBUI.scale(15)};
-        int[] prefWidths = {JBUI.scale(90), JBUI.scale(220), JBUI.scale(90), JBUI.scale(100)};
-        javax.swing.table.TableColumnModel columnModel = quoteTable.getColumnModel();
-        for (int i = 0; i < columnModel.getColumnCount() && i < minWidths.length; i++) {
-            columnModel.getColumn(i).setMinWidth(minWidths[i]);
+        int[] prefWidths = {JBUI.scale(85), JBUI.scale(220), JBUI.scale(90), JBUI.scale(90), JBUI.scale(90)};
+        var columnModel = quoteTable.getColumnModel();
+        for (int i = 0; i < columnModel.getColumnCount() && i < prefWidths.length; i++) {
+            columnModel.getColumn(i).setMinWidth(JBUI.scale(50));
             columnModel.getColumn(i).setPreferredWidth(prefWidths[i]);
         }
         quoteTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
@@ -265,17 +364,15 @@ public class WatchlistPanel extends JPanel {
 
     private void setupTableSorting() {
         Comparator<String> numericComparator = Comparator.comparingDouble(this::parseDisplayNumber);
-        tableSorter.setComparator(2, numericComparator);
-        tableSorter.setComparator(3, numericComparator);
-
+        for (int i = 2; i < tableModel.getColumnCount(); i++) {
+            tableSorter.setComparator(i, numericComparator);
+        }
         JTableHeader header = quoteTable.getTableHeader();
         header.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 int viewColumn = header.columnAtPoint(e.getPoint());
-                if (viewColumn < 0) {
-                    return;
-                }
+                if (viewColumn < 0) return;
                 int modelColumn = quoteTable.convertColumnIndexToModel(viewColumn);
                 applyNextSort(modelColumn);
             }
@@ -289,7 +386,6 @@ public class WatchlistPanel extends JPanel {
         } else {
             sortState = (sortState + 1) % 3;
         }
-
         if (sortState == 0) {
             sortedColumn = -1;
             tableSorter.setSortKeys(null);
@@ -299,41 +395,8 @@ public class WatchlistPanel extends JPanel {
         }
     }
 
-    private void deleteSelectedCode() {
-        int row = quoteTable.getSelectedRow();
-        if (row < 0) {
-            return;
-        }
-        int modelRow = quoteTable.convertRowIndexToModel(row);
-        String code = String.valueOf(tableModel.getValueAt(modelRow, 0));
-        List<String> codes = parseCodes();
-        codes.remove(code);
-        String joined = String.join(",", codes);
-        codesField.setText(joined);
-        properties.setValue(CODES_KEY, joined);
-        tableModel.removeRow(modelRow);
-        statusLabel.setText("已删除 " + code);
-        if (!codes.isEmpty()) {
-            refreshQuotes();
-        }
-    }
-
-    private void updateTable(List<QuoteItem> items) {
-        tableModel.setRowCount(0);
-        for (QuoteItem item : items) {
-            tableModel.addRow(new Object[]{
-                    item.getCode(),
-                    item.getName(),
-                    formatPrice(item.getPrice()),
-                    formatPercent(item.getChangePercent())
-            });
-        }
-        statusLabel.setText("最后更新 " + LocalTime.now().format(timeFormatter)
-                + "    数据源：" + quoteService.getLastSource()
-                + "    每 30 秒自动刷新");
-    }
-
     private String formatPrice(double value) {
+        if (value == 0) return "-";
         return String.format("%.3f", value);
     }
 
@@ -343,30 +406,60 @@ public class WatchlistPanel extends JPanel {
 
     private double parseDisplayNumber(String value) {
         try {
-            return Double.parseDouble(value.replace("%", ""));
+            return Double.parseDouble(value.replace("%", "").replace("+", ""));
         } catch (NumberFormatException ignored) {
             return 0;
         }
     }
 
-    private static class QuoteTableRenderer extends DefaultTableCellRenderer {
+    private String normalizeCode(String code) {
+        if (code == null) return null;
+        String c = code.trim().toLowerCase();
+        if (c.matches("(sh|sz)?\\d{6}")) {
+            if (!c.startsWith("sh") && !c.startsWith("sz")) {
+                c = c.startsWith("5") || c.startsWith("6") || c.startsWith("9") ? "sh" + c : "sz" + c;
+            }
+            return c;
+        }
+        return null;
+    }
+
+    private List<String> parseCodes() {
+        String raw = properties.getValue(CODES_KEY, "");
+        if (raw.isEmpty()) return new ArrayList<>();
+        String[] parts = raw.split("[,，\\s]+");
+        Set<String> codes = new LinkedHashSet<>();
+        for (String part : parts) {
+            String c = part.trim().toLowerCase();
+            if (c.matches("(sh|sz)?\\d{6}")) {
+                codes.add(c);
+            }
+        }
+        return new ArrayList<>(codes);
+    }
+
+    private void saveCodes(List<String> codes) {
+        properties.setValue(CODES_KEY, String.join(",", codes));
+    }
+
+    // --- Renderer ---
+
+    private static class WatchlistCellRenderer extends DefaultTableCellRenderer {
         private static final Color RISE_COLOR = new JBColor(new Color(0xC62828), new Color(0xFF6B6B));
         private static final Color FALL_COLOR = new JBColor(new Color(0x2E7D32), new Color(0x69D98A));
         private static final double EPS = 1e-9;
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                        boolean hasFocus, int row, int column) {
+                                                       boolean hasFocus, int row, int column) {
             super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setBorder(JBUI.Borders.empty(0, 8));
+            setBorder(JBUI.Borders.empty(0, 6));
             setHorizontalAlignment(CENTER);
 
-            if (isSelected) {
-                return this;
-            }
+            if (isSelected) return this;
 
             int modelColumn = table.convertColumnIndexToModel(column);
-            if (modelColumn < 2 || modelColumn > 3) {
+            if (modelColumn < 2) {
                 setForeground(table.getForeground());
                 return this;
             }
@@ -387,7 +480,7 @@ public class WatchlistPanel extends JPanel {
 
         private double parsePercent(Object value) {
             try {
-                return Double.parseDouble(String.valueOf(value).replace("%", "").trim());
+                return Double.parseDouble(String.valueOf(value).replace("%", "").replace("+", "").trim());
             } catch (NumberFormatException ignored) {
                 return 0;
             }
