@@ -62,8 +62,6 @@ public class WatchlistPanel extends JPanel {
         initTable();
         initBottomPanel();
 
-        indexCombo.addActionListener(e -> updateIndexDisplay());
-
         refreshTimer = new Timer(30000, e -> refreshQuotes(false));
         refreshTimer.start();
 
@@ -125,42 +123,39 @@ public class WatchlistPanel extends JPanel {
         JPanel bottomPanel = new JPanel(new BorderLayout(JBUI.scale(8), 0));
         bottomPanel.setBorder(JBUI.Borders.empty(6, 12, 6, 12));
 
-        indexCombo.setPreferredSize(JBUI.size(100, 26));
+        indexCombo.setFont(indexCombo.getFont().deriveFont(11f));
+        indexCombo.setBorder(JBUI.Borders.empty(0, 4));
+        indexCombo.setPreferredSize(JBUI.size(96, 22));
+        indexCombo.setLightWeightPopupEnabled(true);
+
         indexValueLabel.setFont(indexValueLabel.getFont().deriveFont(Font.BOLD, 12f));
         indexChangeLabel.setFont(indexChangeLabel.getFont().deriveFont(Font.BOLD, 12f));
 
-        JPanel indexPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel indexPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         indexPanel.add(indexCombo);
         indexPanel.add(indexValueLabel);
         indexPanel.add(indexChangeLabel);
 
         bottomPanel.add(indexPanel, BorderLayout.WEST);
-
         add(bottomPanel, BorderLayout.SOUTH);
+
+        indexCombo.addActionListener(e -> updateIndexDisplay());
     }
 
     private void updateIndexDisplay() {
         int idx = indexCombo.getSelectedIndex();
-        if (idx >= 0 && idx < lastIndexData.size()) {
-            QuoteItem item = lastIndexData.get(idx);
-            Color up = new JBColor(new Color(0xC62828), new Color(0xFF6B6B));
-            Color down = new JBColor(new Color(0x2E7D32), new Color(0x69D98A));
-            Color flat = UIManager.getColor("Label.infoForeground");
+        if (idx < 0 || idx >= lastIndexData.size()) return;
+        QuoteItem item = lastIndexData.get(idx);
+        Color up = new JBColor(new Color(0xC62828), new Color(0xFF6B6B));
+        Color down = new JBColor(new Color(0x2E7D32), new Color(0x69D98A));
+        Color flat = UIManager.getColor("Label.infoForeground");
 
-            indexValueLabel.setText(String.format("%.2f", item.getPrice()));
-            indexChangeLabel.setText(String.format("%+.2f%%", item.getChangePercent()));
+        indexValueLabel.setText(String.format("%.2f", item.getPrice()));
+        indexChangeLabel.setText(String.format("%+.2f%%", item.getChangePercent()));
 
-            if (item.getChangePercent() > 0) {
-                indexValueLabel.setForeground(up);
-                indexChangeLabel.setForeground(up);
-            } else if (item.getChangePercent() < 0) {
-                indexValueLabel.setForeground(down);
-                indexChangeLabel.setForeground(down);
-            } else {
-                indexValueLabel.setForeground(flat);
-                indexChangeLabel.setForeground(flat);
-            }
-        }
+        Color c = item.getChangePercent() > 0 ? up : item.getChangePercent() < 0 ? down : flat;
+        indexValueLabel.setForeground(c);
+        indexChangeLabel.setForeground(c);
     }
 
     private void showAddDialog() {
