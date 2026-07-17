@@ -133,19 +133,18 @@ public class KuaixunPanel extends JPanel {
 
     private static class KuaixunCellRenderer extends JPanel implements ListCellRenderer<KuaixunItem> {
         private static final Color TITLE_COLOR = new JBColor(new Color(0x1677FF), new Color(0x6DA8FF));
+        private static final Color SEP_COLOR = new JBColor(new Color(0xECECEC), new Color(0x3A3A3A));
         private final JLabel timeLabel = new JLabel();
         private final JTextArea titleArea = new JTextArea();
         private final JTextArea digestArea = new JTextArea();
 
         private KuaixunCellRenderer() {
-            super(new BorderLayout(0, 6));
+            super();
             setOpaque(true);
-            setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 1, 0, UIManager.getColor("Separator.foreground")),
-                    JBUI.Borders.empty(10, 12)
-            ));
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
             timeLabel.setFont(JBFont.small());
+            timeLabel.setAlignmentX(LEFT_ALIGNMENT);
 
             titleArea.setFont(JBFont.label().asBold().deriveFont(JBFont.label().getSize() + 2.0f));
             titleArea.setOpaque(false);
@@ -153,6 +152,7 @@ public class KuaixunPanel extends JPanel {
             titleArea.setFocusable(false);
             titleArea.setLineWrap(true);
             titleArea.setWrapStyleWord(true);
+            titleArea.setAlignmentX(LEFT_ALIGNMENT);
 
             digestArea.setFont(JBFont.label());
             digestArea.setOpaque(false);
@@ -160,14 +160,11 @@ public class KuaixunPanel extends JPanel {
             digestArea.setFocusable(false);
             digestArea.setLineWrap(true);
             digestArea.setWrapStyleWord(true);
+            digestArea.setAlignmentX(LEFT_ALIGNMENT);
 
-            JPanel contentPanel = new JPanel(new BorderLayout(0, 4));
-            contentPanel.setOpaque(false);
-            contentPanel.add(titleArea, BorderLayout.NORTH);
-            contentPanel.add(digestArea, BorderLayout.CENTER);
-
-            add(timeLabel, BorderLayout.NORTH);
-            add(contentPanel, BorderLayout.CENTER);
+            add(timeLabel);
+            add(titleArea);
+            add(digestArea);
         }
 
         @Override
@@ -177,16 +174,24 @@ public class KuaixunPanel extends JPanel {
 
             String title = item.getTitle();
             String digest = item.getDigest();
-            boolean hasDigest = digest != null && !digest.isEmpty()
-                    && !digest.equals(title)
-                    && !digest.replaceAll("[【】。，！？,.;:！？、…·\\s]", "").equals(title.replaceAll("[【】。，！？,.;:！？、…·\\s]", ""));
+            boolean hasDigest = digest != null && !digest.isEmpty() && !digest.equals(title);
 
             titleArea.setText(title != null ? title : "");
+
             if (hasDigest) {
                 digestArea.setText(digest);
                 digestArea.setVisible(true);
+                digestArea.setBorder(JBUI.Borders.empty(2, 0, 0, 0));
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createMatteBorder(0, 0, 1, 0, SEP_COLOR),
+                        JBUI.Borders.empty(5, 12, 6, 12)
+                ));
             } else {
                 digestArea.setVisible(false);
+                setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createMatteBorder(0, 0, 1, 0, SEP_COLOR),
+                        JBUI.Borders.empty(5, 12, 6, 12)
+                ));
             }
 
             Color bg = list.getBackground();
@@ -198,17 +203,17 @@ public class KuaixunPanel extends JPanel {
             titleArea.setBackground(bg);
             digestArea.setBackground(bg);
 
-            int width = list.getWidth() - JBUI.scale(32) - JBUI.scale(16);
-            if (width > JBUI.scale(10)) {
-                titleArea.setSize(width, Short.MAX_VALUE);
+            int w = list.getWidth() - JBUI.scale(24);
+            if (w > JBUI.scale(10)) {
+                titleArea.setSize(w, Short.MAX_VALUE);
                 Dimension ts = titleArea.getPreferredSize();
-                ts.width = width;
+                ts.width = w;
                 titleArea.setPreferredSize(ts);
 
                 if (hasDigest) {
-                    digestArea.setSize(width, Short.MAX_VALUE);
+                    digestArea.setSize(w, Short.MAX_VALUE);
                     Dimension ds = digestArea.getPreferredSize();
-                    ds.width = width;
+                    ds.width = w;
                     digestArea.setPreferredSize(ds);
                 }
             }
