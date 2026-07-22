@@ -145,6 +145,7 @@ public class KuaixunPanel extends JPanel {
 
             timeLabel.setFont(JBFont.small());
             timeLabel.setAlignmentX(LEFT_ALIGNMENT);
+            timeLabel.setAlignmentY(TOP_ALIGNMENT);
 
             titleArea.setFont(JBFont.label().asBold().deriveFont(JBFont.label().getSize() + 2.0f));
             titleArea.setOpaque(false);
@@ -153,6 +154,7 @@ public class KuaixunPanel extends JPanel {
             titleArea.setLineWrap(true);
             titleArea.setWrapStyleWord(true);
             titleArea.setAlignmentX(LEFT_ALIGNMENT);
+            titleArea.setAlignmentY(TOP_ALIGNMENT);
 
             digestArea.setFont(JBFont.label());
             digestArea.setOpaque(false);
@@ -161,6 +163,7 @@ public class KuaixunPanel extends JPanel {
             digestArea.setLineWrap(true);
             digestArea.setWrapStyleWord(true);
             digestArea.setAlignmentX(LEFT_ALIGNMENT);
+            digestArea.setAlignmentY(TOP_ALIGNMENT);
 
             add(timeLabel);
             add(titleArea);
@@ -182,17 +185,15 @@ public class KuaixunPanel extends JPanel {
                 digestArea.setText(digest);
                 digestArea.setVisible(true);
                 digestArea.setBorder(JBUI.Borders.empty(2, 0, 0, 0));
-                setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createMatteBorder(0, 0, 1, 0, SEP_COLOR),
-                        JBUI.Borders.empty(5, 12, 6, 12)
-                ));
             } else {
+                digestArea.setText("");
                 digestArea.setVisible(false);
-                setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createMatteBorder(0, 0, 1, 0, SEP_COLOR),
-                        JBUI.Borders.empty(5, 12, 6, 12)
-                ));
+                digestArea.setBorder(null);
             }
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, SEP_COLOR),
+                    JBUI.Borders.empty(5, 12, 6, 12)
+            ));
 
             Color bg = list.getBackground();
             Color fg = list.getForeground();
@@ -209,12 +210,14 @@ public class KuaixunPanel extends JPanel {
                 Dimension ts = titleArea.getPreferredSize();
                 ts.width = w;
                 titleArea.setPreferredSize(ts);
+                titleArea.setMaximumSize(ts);
 
                 if (hasDigest) {
                     digestArea.setSize(w, Short.MAX_VALUE);
                     Dimension ds = digestArea.getPreferredSize();
                     ds.width = w;
                     digestArea.setPreferredSize(ds);
+                    digestArea.setMaximumSize(ds);
                 }
             }
 
