@@ -21,10 +21,14 @@ public class KuaixunPanel extends JPanel {
     private final JPanel cardsPanel = new JPanel();
     private final KuaixunService service = new KuaixunService();
     private final JLabel statusLabel = new JLabel("正在加载 7x24 快讯...");
-    private final Timer refreshTimer;
+    private final Timer autoRefreshTimer;
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
     private int currentPage = 1;
     private final Set<String> knownIds = ConcurrentHashMap.newKeySet();
+    private long countdownSeconds = REFRESH_INTERVAL_MS / COUNTDOWN_STEP_MS;
+
+    private static final int REFRESH_INTERVAL_MS = 30000;
+    private static final int COUNTDOWN_STEP_MS = 1000;
 
     public KuaixunPanel(Project project) {
         this.project = project;
@@ -72,19 +76,49 @@ public class KuaixunPanel extends JPanel {
         tabs.addTab("自选", new WatchlistPanel(project));
         add(tabs, BorderLayout.CENTER);
 
+        // 统一用一个1秒tick的timer：倒计时+到0触发刷新，避免两个timer不同步
+        autoRefreshTimer = new Timer(COUNTDOWN_STEP_MS, e -> tickAndAutoRefresh());
+        
         refreshData();
-        refreshTimer = new Timer(30000, e -> checkNewData());
-        refreshTimer.start();
+        autoRefreshTimer.start();
     }
 
     @Override
     public void removeNotify() {
-        refreshTimer.stop();
+        autoRefreshTimer.stop();
         super.removeNotify();
+    }
+
+    /** 每秒执行一次：倒计时减1，归零时触发自动刷新 */
+    private void tickAndAutoRefresh() {
+        countdownSeconds--;
+        if (countdownSeconds <= 0) {
+            // 倒计时归零 → 触发自动刷新 + 重置倒计时
+            countdownSeconds = REFRESH_INTERVAL_MS / COUNTDOWN_STEP_MS;
+            checkNewData();
+        }
+        updateCountdownDisplay();
+    }
+
+    /** 只更新状态栏右侧的倒计时文字，不影响左侧的时间戳前缀 */
+    private void updateCountdownDisplay() {
+        String text = statusLabel.getText();
+        if (text.contains("下次刷新")) {
+            String prefix = text.substring(0, text.indexOf("下次刷新"));
+            statusLabel.setText(prefix + "下次刷新 " + countdownSeconds + "秒");
+        } else {
+            setStatus(text);
+        }
+    }
+
+    /** 设置状态栏（含倒计时后缀） */
+    private void setStatus(String baseText) {
+        statusLabel.setText(baseText + "    下次刷新 " + countdownSeconds + "秒");
     }
 
     private void refreshData() {
         knownIds.clear();
+        countdownSeconds = REFRESH_INTERVAL_MS / COUNTDOWN_STEP_MS;
         currentPage = 1;
         cardsPanel.removeAll();
         setStatus("刷新中...");
@@ -107,10 +141,12 @@ public class KuaixunPanel extends JPanel {
                     }
                     cardsPanel.revalidate();
                     cardsPanel.repaint();
-                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + "    每 30 秒自动刷新");
+                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter));
+                    countdownSeconds = REFRESH_INTERVAL_MS / COUNTDOWN_STEP_MS;
                 });
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> setStatus("加载失败，请稍后重试"));
+                countdownSeconds = REFRESH_INTERVAL_MS / COUNTDOWN_STEP_MS;
             }
         }).start();
     }
@@ -141,15 +177,11 @@ public class KuaixunPanel extends JPanel {
                     }
                     cardsPanel.revalidate();
                     cardsPanel.repaint();
-                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + "    每 30 秒自动刷新");
+                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter));
                 });
             } catch (Exception ignored) {
             }
         }).start();
-    }
-
-    private void setStatus(String text) {
-        statusLabel.setText(text);
     }
 
     private JPanel createCard(KuaixunItem item) {
