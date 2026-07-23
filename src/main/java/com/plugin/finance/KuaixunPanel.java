@@ -105,7 +105,7 @@ public class KuaixunPanel extends JPanel {
         String text = statusLabel.getText();
         if (text.contains("下次刷新")) {
             String prefix = text.substring(0, text.indexOf("下次刷新"));
-            statusLabel.setText(prefix + "下次刷新 " + countdownSeconds + "秒");
+            statusLabel.setText(prefix + "下次刷新" + countdownSeconds + "秒");
         } else {
             setStatus(text);
         }
@@ -113,7 +113,7 @@ public class KuaixunPanel extends JPanel {
 
     /** 设置状态栏（含倒计时后缀） */
     private void setStatus(String baseText) {
-        statusLabel.setText(baseText + "    下次刷新 " + countdownSeconds + "秒");
+        statusLabel.setText(baseText + "    下次刷新" + countdownSeconds + "秒");
     }
 
     private void refreshData() {
