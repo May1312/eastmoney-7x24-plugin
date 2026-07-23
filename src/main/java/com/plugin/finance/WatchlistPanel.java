@@ -297,12 +297,10 @@ public class WatchlistPanel extends JPanel {
             refreshIndexData(force);
             return;
         }
-        if (!isMarketOpen() && !force) {
-            setStatus("闭市中，已暂停行情刷新");
-            return;
-        }
-        if (!isMarketOpen()) {
-            setStatus("闭市中，加载最近行情");
+
+        boolean marketClosed = !isMarketOpen();
+        if (marketClosed) {
+            setStatus("闭市中");
         } else {
             setStatus("刷新中...");
         }
@@ -315,13 +313,16 @@ public class WatchlistPanel extends JPanel {
                     List<QuoteItem> items = quoteService.fetchQuotes(codes);
                     SwingUtilities.invokeLater(() -> {
                         updateTable(items);
+                        if (marketClosed) {
+                            statusLabel.setText("闭市中 · 上次行情 " + LocalTime.now().format(timeFormatter));
+                        }
                         refreshIndexData(force);
                     });
                     return;
                 } catch (Exception e) {
                     lastException = e;
                     if (attempt < 3) {
-                        SwingUtilities.invokeLater(() -> setStatus("行情加载中，正在重试..."));
+                        SwingUtilities.invokeLater(() -> setStatus(marketClosed ? "闭市中" : "行情加载中，正在重试..."));
                     }
                     try { Thread.sleep(1500); } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
@@ -332,9 +333,11 @@ public class WatchlistPanel extends JPanel {
             Exception failure = lastException;
             SwingUtilities.invokeLater(() -> {
                 if (tableModel.getRowCount() > 0) {
-                    setStatus("网络波动，显示上次行情");
-                } else {
+                    setStatus(marketClosed ? "闭市中 · 上次行情 " + LocalTime.now().format(timeFormatter) : "网络波动，显示上次行情");
+                } else if (!marketClosed) {
                     setStatus("行情加载失败，请稍后重试");
+                } else {
+                    setStatus("闭市中");
                 }
                 refreshIndexData(force);
             });
