@@ -153,6 +153,18 @@ public class KuaixunPanel extends JPanel {
 
     /** 使用 SwingWorker 做自动刷新检查 */
     private void doCheckNewData() {
+        // 立即显示"刷新中..."状态，卡片半透明闪烁
+        SwingUtilities.invokeLater(() -> {
+            setStatus("刷新中...");
+            for (int i = cardsPanel.getComponentCount() - 1; i >= 0; i--) {
+                Component c = cardsPanel.getComponent(i);
+                if (c instanceof NewsCard) {
+                    ((NewsCard) c).setFading(true);
+                    c.repaint();
+                }
+            }
+        });
+
         SwingWorker<List<KuaixunItem>, Void> worker = new SwingWorker<>() {
             @Override
             protected List<KuaixunItem> doInBackground() throws Exception {
@@ -172,24 +184,36 @@ public class KuaixunPanel extends JPanel {
                             break;
                         }
                     }
-                    if (hasNew) {
-                        for (int i = items.size() - 1; i >= 0; i--) {
-                            KuaixunItem item = items.get(i);
-                            String id = item.getId();
-                            if (id != null && !id.isEmpty() && !knownIds.contains(id)) {
-                                knownIds.add(id);
-                                cardsPanel.add(createCard(item), 0);
-                                cardsPanel.add(Box.createVerticalStrut(JBUI.scale(4)), 1);
+                    SwingUtilities.invokeLater(() -> {
+                        // 恢复卡片外观
+                        for (int i = cardsPanel.getComponentCount() - 1; i >= 0; i--) {
+                            Component c = cardsPanel.getComponent(i);
+                            if (c instanceof NewsCard) {
+                                ((NewsCard) c).setFading(false);
+                                c.repaint();
                             }
                         }
-                        cardsPanel.revalidate();
-                        cardsPanel.repaint();
-                        setStatus("最后更新 " + LocalTime.now().format(timeFormatter));
-                    } else {
-                        setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + " · 已是最新");
-                    }
+                        if (hasNew) {
+                            for (int i = items.size() - 1; i >= 0; i--) {
+                                KuaixunItem item = items.get(i);
+                                String id = item.getId();
+                                if (id != null && !id.isEmpty() && !knownIds.contains(id)) {
+                                    knownIds.add(id);
+                                    cardsPanel.add(createCard(item), 0);
+                                    cardsPanel.add(Box.createVerticalStrut(JBUI.scale(4)), 1);
+                                }
+                            }
+                            cardsPanel.revalidate();
+                            cardsPanel.repaint();
+                            setStatus("最后更新 " + LocalTime.now().format(timeFormatter));
+                        } else {
+                            setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + " · 已是最新");
+                        }
+                    });
                 } catch (Exception e) {
-                    setStatus("刷新失败，请稍后重试");
+                    SwingUtilities.invokeLater(() -> {
+                        setStatus("刷新失败，请稍后重试");
+                    });
                 } finally {
                     countdownSeconds = REFRESH_INTERVAL_MS / COUNTDOWN_STEP_MS;
                 }
@@ -260,6 +284,7 @@ public class KuaixunPanel extends JPanel {
 
         private final String itemId;
         private boolean hovered = false;
+        private float alpha = 1.0f; // 透明度，用于刷新动画
 
         private final String timeText;
 
@@ -329,6 +354,10 @@ public class KuaixunPanel extends JPanel {
 
         String getItemId() { return itemId; }
 
+        void setFading(boolean fading) {
+            this.alpha = fading ? 0.3f : 1.0f;
+        }
+
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
@@ -340,6 +369,9 @@ public class KuaixunPanel extends JPanel {
             int w = getWidth() - gap * 2, h = getHeight() - gap * 2;
 
             g2.setColor(hovered ? CARD_HOVER : CARD_BG);
+            if (alpha < 1.0f) {
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+            }
             g2.fillRoundRect(x, y, w, h, arc, arc);
 
             g2.setColor(CARD_BORDER);
