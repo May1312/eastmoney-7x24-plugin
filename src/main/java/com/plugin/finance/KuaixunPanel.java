@@ -13,6 +13,8 @@ import java.awt.*;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class KuaixunPanel extends JPanel {
     private final Project project;
@@ -22,6 +24,7 @@ public class KuaixunPanel extends JPanel {
     private final Timer refreshTimer;
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
     private int currentPage = 1;
+    private final Set<String> knownIds = ConcurrentHashMap.newKeySet();
 
     public KuaixunPanel(Project project) {
         this.project = project;
@@ -81,6 +84,7 @@ public class KuaixunPanel extends JPanel {
     }
 
     private void refreshData() {
+        knownIds.clear();
         currentPage = 1;
         cardsPanel.removeAll();
         setStatus("刷新中...");
@@ -92,13 +96,18 @@ public class KuaixunPanel extends JPanel {
             try {
                 List<KuaixunItem> items = service.fetchPage(page);
                 SwingUtilities.invokeLater(() -> {
-                    for (KuaixunItem item : items) {
-                        cardsPanel.add(createCard(item));
-                        cardsPanel.add(Box.createVerticalStrut(JBUI.scale(4)));
+                    for (int i = items.size() - 1; i >= 0; i--) {
+                        KuaixunItem item = items.get(i);
+                        String id = item.getId();
+                        if (id != null && !id.isEmpty() && !knownIds.contains(id)) {
+                            knownIds.add(id);
+                            cardsPanel.add(createCard(item), 0);
+                            cardsPanel.add(Box.createVerticalStrut(JBUI.scale(4)), 1);
+                        }
                     }
-                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + "    每 30 秒自动刷新");
                     cardsPanel.revalidate();
                     cardsPanel.repaint();
+                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + "    每 30 秒自动刷新");
                 });
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> setStatus("加载失败，请稍后重试"));
@@ -107,30 +116,33 @@ public class KuaixunPanel extends JPanel {
     }
 
     private void checkNewData() {
-        if (cardsPanel.getComponentCount() == 0) return;
-        // 从第一个 card 取 id
-        Component first = cardsPanel.getComponent(0);
-        if (!(first instanceof NewsCard)) return;
-        String latestId = ((NewsCard) first).getItemId();
         new Thread(() -> {
             try {
-                int count = service.checkNewCount(latestId);
-                if (count > 0) {
-                    List<KuaixunItem> newItems = service.fetchPage(1);
-                    SwingUtilities.invokeLater(() -> {
-                        int insertIndex = 0;
-                        for (int i = newItems.size() - 1; i >= 0; i--) {
-                            KuaixunItem item = newItems.get(i);
-                            if (!item.getId().equals(latestId)) {
-                                cardsPanel.add(createCard(item), insertIndex);
-                                cardsPanel.add(Box.createVerticalStrut(JBUI.scale(4)), insertIndex);
-                            }
-                        }
-                        setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + "    每 30 秒自动刷新");
-                        cardsPanel.revalidate();
-                        cardsPanel.repaint();
-                    });
+                List<KuaixunItem> items = service.fetchPage(1);
+                boolean hasNew = false;
+                for (int i = items.size() - 1; i >= 0; i--) {
+                    KuaixunItem item = items.get(i);
+                    String id = item.getId();
+                    if (id != null && !id.isEmpty() && !knownIds.contains(id)) {
+                        hasNew = true;
+                        break;
+                    }
                 }
+                if (!hasNew) return;
+                SwingUtilities.invokeLater(() -> {
+                    for (int i = items.size() - 1; i >= 0; i--) {
+                        KuaixunItem item = items.get(i);
+                        String id = item.getId();
+                        if (id != null && !id.isEmpty() && !knownIds.contains(id)) {
+                            knownIds.add(id);
+                            cardsPanel.add(createCard(item), 0);
+                            cardsPanel.add(Box.createVerticalStrut(JBUI.scale(4)), 1);
+                        }
+                    }
+                    cardsPanel.revalidate();
+                    cardsPanel.repaint();
+                    setStatus("最后更新 " + LocalTime.now().format(timeFormatter) + "    每 30 秒自动刷新");
+                });
             } catch (Exception ignored) {
             }
         }).start();
