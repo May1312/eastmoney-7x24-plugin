@@ -29,6 +29,8 @@ import java.util.Set;
 public class WatchlistPanel extends JPanel {
 
     private static final String CODES_KEY = "eastmoney.7x24.watchlist.codes";
+    private static final String SORT_COL_KEY = "eastmoney.7x24.watchlist.sortColumn";
+    private static final String SORT_STATE_KEY = "eastmoney.7x24.watchlist.sortState";
     private static final String[] COLUMN_NAMES = {"代码", "名称", "最新价", "涨跌幅", "涨跌额"};
     private static final List<String> INDEX_CODES = List.of("sh000001", "sz399001", "sz399006");
     private static final String[] INDEX_NAMES = {"上证指数", "深证成指", "创业板指"};
@@ -61,6 +63,7 @@ public class WatchlistPanel extends JPanel {
         initTopPanel();
         initTable();
         initBottomPanel();
+        restoreSortState();
 
         refreshTimer = new Timer(30000, e -> refreshQuotes(false));
         refreshTimer.start();
@@ -387,6 +390,28 @@ public class WatchlistPanel extends JPanel {
         } else {
             SortOrder order = sortState == 1 ? SortOrder.DESCENDING : SortOrder.ASCENDING;
             tableSorter.setSortKeys(List.of(new RowSorter.SortKey(modelColumn, order)));
+        }
+        saveSortState();
+    }
+
+    private void saveSortState() {
+        properties.setValue(SORT_COL_KEY, String.valueOf(sortedColumn));
+        properties.setValue(SORT_STATE_KEY, String.valueOf(sortState));
+    }
+
+    private void restoreSortState() {
+        String colStr = properties.getValue(SORT_COL_KEY, "-1");
+        String stateStr = properties.getValue(SORT_STATE_KEY, "0");
+        try {
+            int col = Integer.parseInt(colStr);
+            int state = Integer.parseInt(stateStr);
+            if (col >= 0 && (state == 1 || state == 2)) {
+                sortedColumn = col;
+                sortState = state;
+                SortOrder order = state == 1 ? SortOrder.DESCENDING : SortOrder.ASCENDING;
+                tableSorter.setSortKeys(List.of(new RowSorter.SortKey(col, order)));
+            }
+        } catch (NumberFormatException ignored) {
         }
     }
 
